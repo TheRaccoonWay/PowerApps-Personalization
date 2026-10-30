@@ -1,0 +1,28 @@
+# Power-Apps-Exporte (App-Pakete, Solutions, .msapp)
+# Enthalten App-Inhalte, IDs, den Umgebungsnamen und die E-Mail-Adresse des Erstellers
+*.msapp
+*.zip
+
+# Entpackte Apps (pac canvas unpack, pac solution unpack)
+unpacked/
+
+# Aus dem Tool exportierte Marken (JSON-Sicherung)
+marken*.json
+brands*.json
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editoren
+.vscode/
+.idea/
+*.swp
+
+# Falls später doch Node-Werkzeuge dazukommen
+node_modules/
+
+# Lokale Einstellungen und Zugangsdaten
+.env
+*.log
