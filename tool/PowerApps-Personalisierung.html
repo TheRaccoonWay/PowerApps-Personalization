@@ -56,6 +56,7 @@ summary{cursor:pointer;color:var(--mid);font-size:14px}
 button,a.dl{font:600 16px var(--sans);background:var(--accent);color:var(--accent-ink);border:0;
   border-radius:5px;padding:12px 22px;cursor:pointer;text-decoration:none;display:inline-block}
 button.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent);padding:8px 16px;font-size:14px}
+a{color:var(--accent)}
 button:disabled{opacity:.4;cursor:not-allowed}
 button:focus-visible,input:focus-visible,a:focus-visible,.drop:focus-within,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #result{margin-top:26px;border-top:1px solid var(--line);padding-top:18px}
@@ -102,7 +103,7 @@ textarea{width:100%;min-height:150px;resize:vertical;background:var(--code);colo
 .opt{font:14px var(--sans);color:var(--mid)}
 ol.how{margin:8px 0 16px;padding-left:22px;color:var(--ink)}
 ol.how li{margin-bottom:4px}
-body.nohelp :is(.step,.note,.help,.check small,.field label small){display:none}
+body.nohelp :is(.step,.note,.help,.check small,.field label small,.choice:not(:disabled) span){display:none}
 #yaml-sec[hidden]{display:none}
 h3{font:600 17px/1.3 var(--serif);margin:22px 0 6px}
 #stepper{margin:18px 0 0}
@@ -140,8 +141,10 @@ h3{font:600 17px/1.3 var(--serif);margin:22px 0 6px}
       <select id="brand-sel"></select>
       <button id="brand-save" class="ghost" type="button">Als Vorlage speichern</button>
       <button id="brand-del" class="ghost" type="button" disabled>Löschen</button>
+      <button id="brand-restore" class="ghost" type="button" hidden>Eingebaute wiederherstellen</button>
     </div>
     <p class="hint" id="brand-info"></p>
+    <p class="hint help" id="brand-note"></p>
     <div class="grid">
       <div class="field"><label for="brand">Name der Marke</label><input type="text" id="brand" value="Beispiel">
         <div class="hint help">Daraus entsteht der Name des Themes.</div></div>
@@ -1089,20 +1092,20 @@ $("reset").addEventListener("click", () => runWith(resetFile, $("result-reset"),
 const BUILT_IN_BRANDS = [
   // in2success: Blau und Grau laut Corporate-Identity-Seite; Text, Hintergrund und Fehler sind neutrale Vorgaben
   { name: "in2success", font: "Segoe UI", radius: 5, torsion: 0, vibrancy: 0,
-    colors: { primary: "#014a78", secondary: "#5e5c5b", text: "#323130", background: "#ffffff", error: "#a4262c" }, extra: {},
-    note: "in2success: Blau (#014a78) und Grau (#5e5c5b) laut Corporate-Identity-Seite. Als Schrift steht dort Trajan Pro Bold, die Power Apps nicht kennt, hier ist Segoe UI eingetragen. Text, Hintergrund und Fehlerfarbe stehen dort nicht und sind neutrale Vorgaben." },
+    colors: { primary: "#014a78", secondary: "#5e5c5b", text: "#323130", background: "#ffffff", error: "#a4262c" }, extra: {} },
   { name: "Customer", font: "Arial", radius: 20, torsion: 0, vibrancy: 0,
     colors: { primary: "#3aaa35", secondary: "#e6f1dd", text: "#000000", background: "#ffffff", error: "#B00020" },
     extra: { elementBg: "#f0f0f0", disabled: "#3c3c3c", border: "#3aaa35", inputFill: "#f0f0f0", inputBorderThickness: "0", fontSize: "16" },
-    custom: "backgroundColorTransparent: RGBA(255, 255, 255, 0.8)\nsideNavColor: ColorValue(\"#3aaa35\")\nhoverFill: ColorFade(ColorValue(\"#3aaa35\"), 80%)\nBorderThickness: 1",
-    note: "Customer: Werte aus deinem OnStart. backgroundColorTransparent, sideNavColor, hoverFill und BorderThickness stehen als eigene Zusatzfelder. Rahmen, Fokus und gedimmter Text werden abgeleitet, weil dein Block sie nicht kennt." },
+    custom: "backgroundColorTransparent: RGBA(255, 255, 255, 0.8)\nsideNavColor: ColorValue(\"#3aaa35\")\nhoverFill: ColorFade(ColorValue(\"#3aaa35\"), 80%)\nBorderThickness: 1" },
   { name: "The Raccoon Way", font: "Roboto, 'Segoe UI'", radius: 5, torsion: 0, vibrancy: 0,
     colors: { primary: "#7B2FBE", secondary: "#3B5BDB", text: "#0D0D1A", background: "#FFFFFF", error: "#B00020" },
-    extra: { elementBorderFocus: "#3B5BDB" },
-    note: "The Raccoon Way: helles Design mit weißem Hintergrund (#FFFFFF). Farben, Radius und Schrift aus deinem Screenshot und Beispiel-OnStart. Fokusfarbe ist die Sekundärfarbe, Elementhintergrund, Rahmen, gedimmter Text und Eingabefüllung werden aus Text und Hintergrund abgeleitet." },
+    extra: { elementBorderFocus: "#3B5BDB" } },
 ];
 const STORE_KEY = "themes_einsetzen_marken";
 function loadSaved() { try { return JSON.parse(localStorage.getItem(STORE_KEY) || "[]"); } catch { return []; } }
+const HIDE_KEY = "themes_einsetzen_ausgeblendet";
+function loadHidden() { try { return JSON.parse(localStorage.getItem(HIDE_KEY) || "[]"); } catch { return []; } }
+function storeHidden(list) { try { localStorage.setItem(HIDE_KEY, JSON.stringify(list)); } catch {} }
 function storeSaved(list) { try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); return true; } catch { return false; } }
 function collectBrand() {
   const c = cfg();
@@ -1121,21 +1124,25 @@ function applyBrand(b) {
 let brandStorageOk = true;
 function renderBrands(selectName) {
   const saved = loadSaved(), sel = $("brand-sel"), keep = selectName || sel.value;
-  sel.innerHTML = "";
+  sel.innerHTML = ""; $("brand-note").textContent = "";
   const add = (v, label) => { const o = document.createElement("option"); o.value = v; o.textContent = label; sel.appendChild(o); };
   add("", "(eigene Eingabe)");
-  BUILT_IN_BRANDS.forEach((b) => add("b:" + b.name, b.name + " (fest eingebaut)"));
+  const hidden = loadHidden();
+  BUILT_IN_BRANDS.filter((b) => !hidden.includes(b.name)).forEach((b) => add("b:" + b.name, b.name + " (fest eingebaut)"));
+  $("brand-restore").hidden = !hidden.length;
   saved.forEach((b) => add("s:" + b.name, b.name));
   sel.value = [...sel.options].some((o) => o.value === keep) ? keep : "";
-  $("brand-del").disabled = !sel.value.startsWith("s:");
+  $("brand-del").disabled = !sel.value;
   $("brand-json").value = JSON.stringify(saved, null, 2);
 }
 function findBrand(v) { return v.startsWith("b:") ? BUILT_IN_BRANDS.find((b) => "b:" + b.name === v) : loadSaved().find((b) => "s:" + b.name === v); }
 $("brand-sel").addEventListener("change", () => {
-  const v = $("brand-sel").value; $("brand-del").disabled = !v.startsWith("s:");
+  const v = $("brand-sel").value; $("brand-del").disabled = !v;
+  $("brand-note").textContent = "";
   if (!v) { $("brand-info").textContent = ""; return; }
   const b = findBrand(v); if (!b) return; applyBrand(b);
-  $("brand-info").textContent = b.note || `Marke "${b.name}" geladen.`;
+  $("brand-info").textContent = b.note ? "" : `Marke "${b.name}" geladen.`;
+  $("brand-note").textContent = b.note || "";
 });
 $("brand-save").addEventListener("click", () => {
   const b = collectBrand(), info = $("brand-info");
@@ -1150,9 +1157,12 @@ $("brand-save").addEventListener("click", () => {
   if (!brandStorageOk) $("brand-json").value = JSON.stringify(list, null, 2);
 });
 $("brand-del").addEventListener("click", () => {
-  const v = $("brand-sel").value; if (!v.startsWith("s:")) return;
-  const name = v.slice(2); storeSaved(loadSaved().filter((x) => x.name !== name)); renderBrands(""); $("brand-info").textContent = `Marke "${name}" gelöscht.`;
+  const v = $("brand-sel").value; if (!v) return;
+  const name = v.slice(2);
+  if (v.startsWith("b:")) storeHidden([...loadHidden(), name]); else storeSaved(loadSaved().filter((x) => x.name !== name));
+  renderBrands(""); $("brand-info").textContent = `Marke "${name}" gelöscht.`;
 });
+$("brand-restore").addEventListener("click", () => { storeHidden([]); renderBrands(""); $("brand-info").textContent = "Eingebaute Marken wiederhergestellt."; });
 $("brand-current").addEventListener("click", () => {
   $("brand-json").value = JSON.stringify([collectBrand()], null, 2);
   $("brand-info").textContent = "Aktuelle Eingabe als Text angezeigt, auch ohne Speichern. Der Text lässt sich mit \"Aus Text importieren\" unter einem anderen Namen wieder laden.";
